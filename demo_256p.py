@@ -9,6 +9,7 @@ sp=256 #spatial resolution: 256x512
 baseName = "cityscapes"
 modelName = baseName+"_result_256p"
 ignoreLabel = -1
+shiftTrainingData = True
 
 def lrelu(x):
     return tf.maximum(0.2*x,x)
@@ -127,7 +128,16 @@ if is_training:
             if input_images[ind] is None:
                 label_images[ind]=helper.get_semantic_map_nn("data/"+baseName+"/Label256Full/%08d.png"%ind,baseName,ignoreLabel)
                 input_images[ind]=np.expand_dims(np.float32(scipy.misc.imread("data/"+baseName+"/RGB256Full/%08d.png"%ind)),axis=0)#training image
-            _,G_current,l0,l1,l2,l3,l4,l5=sess.run([G_opt,G_loss,p0,p1,p2,p3,p4,p5],feed_dict={label:np.concatenate((label_images[ind],np.expand_dims(1-np.sum(label_images[ind],axis=3),axis=3)),axis=3),real_image:input_images[ind],lr:1e-4})#may try lr:min(1e-6*np.power(1.1,epoch-1),1e-4 if epoch>100 else 1e-3) in case lr:1e-4 is not good
+            
+            if shiftTrainingData:
+                ox = np.random.randint(label_images[ind].shape[1])
+                oy = np.random.randint(label_images[ind].shape[0])
+
+                rolledLabelImage = np.roll(label_images[ind], (ox,oy), axis=(0,1))
+                rolledInputImage = np.roll(input_images[ind], (ox,oy), axis=(0,1))
+                _,G_current,l0,l1,l2,l3,l4,l5=sess.run([G_opt,G_loss,p0,p1,p2,p3,p4,p5],feed_dict={label:np.concatenate((rolledLabelImage,np.expand_dims(1-np.sum(rolledLabelImage,axis=3),axis=3)),axis=3),real_image:rolledInputImage,lr:1e-4})
+            else:
+                _,G_current,l0,l1,l2,l3,l4,l5=sess.run([G_opt,G_loss,p0,p1,p2,p3,p4,p5],feed_dict={label:np.concatenate((label_images[ind],np.expand_dims(1-np.sum(label_images[ind],axis=3),axis=3)),axis=3),real_image:input_images[ind],lr:1e-4})#may try lr:min(1e-6*np.power(1.1,epoch-1),1e-4 if epoch>100 else 1e-3) in case lr:1e-4 is not good
             g_loss[ind]=G_current
             print("%d %d %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f"%(epoch,cnt,np.mean(g_loss[np.where(g_loss)]),np.mean(l0),np.mean(l1),np.mean(l2),np.mean(l3),np.mean(l4),np.mean(l5),time.time()-st))
         os.makedirs(modelName+"/%04d"%epoch)
